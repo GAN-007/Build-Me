@@ -1,0 +1,151 @@
+name: Import Auto-Company upstream
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/import-auto-company.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: import-auto-company-upstream
+  cancel-in-progress: false
+
+jobs:
+  import:
+    name: Import exact upstream tree
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SOURCE_REPOSITORY: MaxMiksa/Auto-Company
+      SOURCE_URL: https://github.com/MaxMiksa/Auto-Company.git
+      SOURCE_SHA: ebfab9b4bd5f0ab5ad452a1ff85285b3c141acdd
+      IMPORT_BRANCH: agent/import-auto-company
+    steps:
+      - name: Checkout destination main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Import the complete upstream tree
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git remote remove upstream 2>/dev/null || true
+          git remote add upstream "$SOURCE_URL"
+          git fetch --no-tags --depth=1 upstream "$SOURCE_SHA"
+          git cat-file -e "$SOURCE_SHA^{commit}"
+
+          source_file_count="$(git ls-tree -r --name-only "$SOURCE_SHA" | wc -l | tr -d ' ')"
+          source_tree_sha="$(git rev-parse "$SOURCE_SHA^{tree}")"
+
+          git checkout -B "$IMPORT_BRANCH" origin/main
+          git rm -r --ignore-unmatch .
+          git clean -fdx
+          git checkout "$SOURCE_SHA" -- .
+
+          cat > IMPORT_SOURCE.md <<EOF
+          # Import provenance
+
+          This repository contains a complete tree import from the upstream project.
+
+          - Source repository: https://github.com/${SOURCE_REPOSITORY}
+          - Source branch: \`main\`
+          - Source commit: \`${SOURCE_SHA}\`
+          - Source tree: \`${source_tree_sha}\`
+          - Imported by: GitHub Actions
+          - Import date: 2026-07-22
+
+          The upstream files, executable modes, documentation, package metadata, attribution, and license declarations are retained unchanged. This provenance file is the only destination-specific addition.
+          EOF
+
+          git add -A
+
+          imported_source_file_count="$(git ls-files | grep -v '^IMPORT_SOURCE.md$' | wc -l | tr -d ' ')"
+          if [[ "$source_file_count" != "$imported_source_file_count" ]]; then
+            echo "Source/imported file-count mismatch: source=$source_file_count imported=$imported_source_file_count" >&2
+            exit 1
+          fi
+
+          if ! git diff --cached --quiet "$SOURCE_SHA" -- . ':(exclude)IMPORT_SOURCE.md'; then
+            echo "Imported files differ from the pinned upstream tree." >&2
+            git diff --cached --stat "$SOURCE_SHA" -- . ':(exclude)IMPORT_SOURCE.md'
+            exit 1
+          fi
+
+          git commit -m "import: transfer Auto-Company at ${SOURCE_SHA}"
+          git push --force origin "$IMPORT_BRANCH"
+
+          {
+            echo "## Auto-Company import"
+            echo "- Upstream commit: \`${SOURCE_SHA}\`"
+            echo "- Upstream tree: \`${source_tree_sha}\`"
+            echo "- Imported tracked files: ${source_file_count}"
+            echo "- Destination branch: \`${IMPORT_BRANCH}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  validate:
+    name: Validate imported application
+    needs: import
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout imported branch without credentials
+        uses: actions/checkout@v4
+        with:
+          ref: agent/import-auto-company
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Validate Python syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile dashboard/server.py tests/test_dashboard_server.py
+
+      - name: Validate JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check dashboard/app.js
+
+      - name: Validate shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            bash -n "$file"
+          done < <(find scripts -type f -name '*.sh' -print0)
+
+      - name: Validate PowerShell syntax
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-ChildItem -Path scripts/windows -Filter *.ps1 -File | ForEach-Object {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_.Message }
+              throw "PowerShell parse validation failed for $($_.FullName)"
+            }
+          }
+
+      - name: Run dashboard unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -v
