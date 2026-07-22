@@ -30,6 +30,7 @@ jobs:
     env:
       SOURCE_REPOSITORY: MaxMiksa/Auto-Company
       SOURCE_URL: https://github.com/MaxMiksa/Auto-Company.git
+      SOURCE_BRANCH: main
       SOURCE_SHA: ebfab9b4bd5f0ab5ad452a1ff85285b3c141acdd
       IMPORT_BRANCH: agent/import-auto-company
     steps:
@@ -40,26 +41,36 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Import the complete upstream tree
+      - name: Import and verify the complete upstream tree
         shell: bash
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
+          trap 'status=$?; echo "Import failed at line ${LINENO} with status ${status}" >&2; exit "$status"' ERR
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git remote remove upstream 2>/dev/null || true
           git remote add upstream "$SOURCE_URL"
-          git fetch --no-tags --depth=1 upstream "$SOURCE_SHA"
-          git cat-file -e "$SOURCE_SHA^{commit}"
+          git fetch --quiet --no-tags --depth=1 upstream "$SOURCE_BRANCH"
 
-          source_file_count="$(git ls-tree -r --name-only "$SOURCE_SHA" | wc -l | tr -d ' ')"
+          fetched_sha="$(git rev-parse FETCH_HEAD)"
+          if [[ "$fetched_sha" != "$SOURCE_SHA" ]]; then
+            echo "Pinned source commit mismatch: expected=$SOURCE_SHA fetched=$fetched_sha" >&2
+            exit 1
+          fi
+
           source_tree_sha="$(git rev-parse "$SOURCE_SHA^{tree}")"
+          source_file_count="$(git ls-tree -r --name-only "$SOURCE_SHA" | wc -l | tr -d ' ')"
 
-          git checkout -B "$IMPORT_BRANCH" origin/main
-          git rm -r --ignore-unmatch .
-          git clean -fdx
-          git checkout "$SOURCE_SHA" -- .
+          git checkout --quiet -B "$IMPORT_BRANCH" origin/main
+          git clean -ffdqx
+          git read-tree --reset -u "$SOURCE_SHA"
+
+          if git cat-file -e "$SOURCE_SHA:IMPORT_SOURCE.md" 2>/dev/null; then
+            echo "Upstream unexpectedly contains IMPORT_SOURCE.md; choose a non-conflicting provenance path." >&2
+            exit 1
+          fi
 
           cat > IMPORT_SOURCE.md <<EOF
           # Import provenance
@@ -67,7 +78,7 @@ jobs:
           This repository contains a complete tree import from the upstream project.
 
           - Source repository: https://github.com/${SOURCE_REPOSITORY}
-          - Source branch: \`main\`
+          - Source branch: \`${SOURCE_BRANCH}\`
           - Source commit: \`${SOURCE_SHA}\`
           - Source tree: \`${source_tree_sha}\`
           - Imported by: GitHub Actions
@@ -75,8 +86,7 @@ jobs:
 
           The upstream files, executable modes, documentation, package metadata, attribution, and license declarations are retained unchanged. This provenance file is the only destination-specific addition.
           EOF
-
-          git add -A
+          git add IMPORT_SOURCE.md
 
           imported_source_file_count="$(git ls-files | grep -v '^IMPORT_SOURCE.md$' | wc -l | tr -d ' ')"
           if [[ "$source_file_count" != "$imported_source_file_count" ]]; then
@@ -84,14 +94,22 @@ jobs:
             exit 1
           fi
 
-          if ! git diff --cached --quiet "$SOURCE_SHA" -- . ':(exclude)IMPORT_SOURCE.md'; then
-            echo "Imported files differ from the pinned upstream tree." >&2
-            git diff --cached --stat "$SOURCE_SHA" -- . ':(exclude)IMPORT_SOURCE.md'
+          git rm --cached --quiet IMPORT_SOURCE.md
+          imported_source_tree_sha="$(git write-tree)"
+          git add IMPORT_SOURCE.md
+
+          if [[ "$source_tree_sha" != "$imported_source_tree_sha" ]]; then
+            echo "Source/imported tree mismatch: source=$source_tree_sha imported=$imported_source_tree_sha" >&2
             exit 1
           fi
 
-          git commit -m "import: transfer Auto-Company at ${SOURCE_SHA}"
-          git push --force origin "$IMPORT_BRANCH"
+          git commit --quiet -m "import: transfer Auto-Company at ${SOURCE_SHA}"
+          git push --quiet --force origin "$IMPORT_BRANCH"
+
+          echo "Imported source commit $SOURCE_SHA"
+          echo "Verified source tree $source_tree_sha"
+          echo "Verified tracked source files $source_file_count"
+          echo "Pushed destination branch $IMPORT_BRANCH"
 
           {
             echo "## Auto-Company import"
