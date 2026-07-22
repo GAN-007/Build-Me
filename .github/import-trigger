@@ -1,3 +1,3 @@
 Import MaxMiksa/Auto-Company main at ebfab9b4bd5f0ab5ad452a1ff85285b3c141acdd into agent/import-auto-company.
 Verification strategy: exact upstream Git tree SHA.
-Permission strategy: force-remove only the verified workflow before app-authorized insertion.
+Finalization strategy: export the deferred workflow as an artifact for exact app-authorized insertion.
