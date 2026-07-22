@@ -36,7 +36,7 @@ jobs:
           exec > >(tee /tmp/auto-company-import.log) 2>&1
           trap 's=$?; echo "FAILED line=$LINENO status=$s"; exit $s' ERR
           git init -q .
-          git config user.name 'github-actions[bot]]'
+          git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git remote add origin "https://x-access-token:${DESTINATION_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git fetch -q --no-tags origin main
@@ -50,6 +50,8 @@ jobs:
           source_count="$(git ls-tree -r --name-only "$SOURCE_SHA" | wc -l | tr -d ' ')"
           git cat-file -e "$SOURCE_SHA:$DEFERRED_WORKFLOW"
           deferred_workflow_blob="$(git rev-parse "$SOURCE_SHA:$DEFERRED_WORKFLOW")"
+          mkdir -p /tmp/deferred-workflow
+          git show "$SOURCE_SHA:$DEFERRED_WORKFLOW" > /tmp/deferred-workflow/ar-collections-finance-gate.yml
           git checkout -q -B "$IMPORT_BRANCH" "$base_sha"
           git read-tree --reset -u "$SOURCE_SHA"
           printf '%s\n' '# Import provenance' '' 'This repository contains a complete tree import from the upstream project.' '' '- Source repository: https://github.com/MaxMiksa/Auto-Company' '- Source branch: `main`' "- Source commit: \`$SOURCE_SHA\`" "- Source tree: \`$source_tree\`" "- Deferred workflow blob: \`$deferred_workflow_blob\`" '- Imported by: GitHub Actions and the connected GitHub app' '- Import date: 2026-07-22' '' 'The complete upstream tree was verified before the workflow file was deferred for an app-authorized write. IMPORT_SOURCE.md is the only destination-specific addition.' > IMPORT_SOURCE.md
@@ -68,12 +70,14 @@ jobs:
           git push -q --force origin "HEAD:refs/heads/$IMPORT_BRANCH"
           echo "SUCCESS branch=$IMPORT_BRANCH commit=$(git rev-parse HEAD)"
 
-      - name: Upload import diagnostics
+      - name: Upload import diagnostics and deferred workflow
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: auto-company-import-diagnostics-${{ github.run_id }}
-          path: /tmp/auto-company-import.log
+          name: auto-company-import-bundle-${{ github.run_id }}
+          path: |
+            /tmp/auto-company-import.log
+            /tmp/deferred-workflow/ar-collections-finance-gate.yml
           if-no-files-found: warn
           retention-days: 7
 
