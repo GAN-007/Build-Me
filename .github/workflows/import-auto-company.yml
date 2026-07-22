@@ -1,3 +1,4 @@
+# Controlled one-time import of the pinned upstream tree.
 name: Import Auto-Company upstream
 
 on:
@@ -6,7 +7,7 @@ on:
       - main
     paths:
       - .github/workflows/import-auto-company.yml
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 permissions:
   contents: write
