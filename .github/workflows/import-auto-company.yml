@@ -50,9 +50,19 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          # actions/checkout installs a repository-scoped authorization header.
+          # Remove it while reading the separate public upstream repository,
+          # then restore it before pushing to the destination repository.
+          checkout_auth_header="$(git config --local --get-all http.https://github.com/.extraheader | head -n 1 || true)"
+          git config --local --unset-all http.https://github.com/.extraheader || true
+
           git remote remove upstream 2>/dev/null || true
           git remote add upstream "$SOURCE_URL"
           git fetch --quiet --no-tags --depth=1 upstream "$SOURCE_BRANCH"
+
+          if [[ -n "$checkout_auth_header" ]]; then
+            git config --local http.https://github.com/.extraheader "$checkout_auth_header"
+          fi
 
           fetched_sha="$(git rev-parse FETCH_HEAD)"
           if [[ "$fetched_sha" != "$SOURCE_SHA" ]]; then
