@@ -36,7 +36,7 @@ jobs:
           exec > >(tee /tmp/auto-company-import.log) 2>&1
           trap 's=$?; echo "FAILED line=$LINENO status=$s"; exit $s' ERR
           git init -q .
-          git config user.name 'github-actions[bot]'
+          git config user.name 'github-actions[bot]]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git remote add origin "https://x-access-token:${DESTINATION_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git fetch -q --no-tags origin main
@@ -62,7 +62,7 @@ jobs:
           git add IMPORT_SOURCE.md
           echo "source_tree=$source_tree imported_source_tree=$imported_tree"
           test "$source_tree" = "$imported_tree"
-          git rm -q "$DEFERRED_WORKFLOW"
+          git rm -q -f "$DEFERRED_WORKFLOW"
           echo "deferred_workflow=$DEFERRED_WORKFLOW blob=$deferred_workflow_blob"
           git commit -q -m "import: transfer Auto-Company at $SOURCE_SHA"
           git push -q --force origin "HEAD:refs/heads/$IMPORT_BRANCH"
