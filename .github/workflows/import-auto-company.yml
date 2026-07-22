@@ -5,7 +5,6 @@ on:
     branches: [main]
     paths:
       - .github/workflows/import-auto-company.yml
-      - .github/import-auto-company.sh
   pull_request:
     branches: [main]
     paths: [.github/import-trigger]
@@ -27,6 +26,7 @@ jobs:
     env:
       SOURCE_SHA: ebfab9b4bd5f0ab5ad452a1ff85285b3c141acdd
       IMPORT_BRANCH: agent/import-auto-company
+      DEFERRED_WORKFLOW: .github/workflows/ar-collections-finance-gate.yml
       DESTINATION_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Import and verify complete tree
@@ -48,9 +48,11 @@ jobs:
           test "$fetched_sha" = "$SOURCE_SHA"
           source_tree="$(git rev-parse "$SOURCE_SHA^{tree}")"
           source_count="$(git ls-tree -r --name-only "$SOURCE_SHA" | wc -l | tr -d ' ')"
+          git cat-file -e "$SOURCE_SHA:$DEFERRED_WORKFLOW"
+          deferred_workflow_blob="$(git rev-parse "$SOURCE_SHA:$DEFERRED_WORKFLOW")"
           git checkout -q -B "$IMPORT_BRANCH" "$base_sha"
           git read-tree --reset -u "$SOURCE_SHA"
-          printf '%s\n' '# Import provenance' '' 'This repository contains a complete tree import from the upstream project.' '' '- Source repository: https://github.com/MaxMiksa/Auto-Company' '- Source branch: `main`' "- Source commit: \`$SOURCE_SHA\`" "- Source tree: \`$source_tree\`" '- Imported by: GitHub Actions' '- Import date: 2026-07-22' '' 'The upstream files, executable modes, documentation, package metadata, attribution, and license declarations are retained unchanged. This provenance file is the only destination-specific addition.' > IMPORT_SOURCE.md
+          printf '%s\n' '# Import provenance' '' 'This repository contains a complete tree import from the upstream project.' '' '- Source repository: https://github.com/MaxMiksa/Auto-Company' '- Source branch: `main`' "- Source commit: \`$SOURCE_SHA\`" "- Source tree: \`$source_tree\`" "- Deferred workflow blob: \`$deferred_workflow_blob\`" '- Imported by: GitHub Actions and the connected GitHub app' '- Import date: 2026-07-22' '' 'The complete upstream tree was verified before the workflow file was deferred for an app-authorized write. IMPORT_SOURCE.md is the only destination-specific addition.' > IMPORT_SOURCE.md
           git add IMPORT_SOURCE.md
           imported_count="$(git ls-files | grep -v '^IMPORT_SOURCE.md$' | wc -l | tr -d ' ')"
           echo "source_files=$source_count imported_source_files=$imported_count"
@@ -60,6 +62,8 @@ jobs:
           git add IMPORT_SOURCE.md
           echo "source_tree=$source_tree imported_source_tree=$imported_tree"
           test "$source_tree" = "$imported_tree"
+          git rm -q "$DEFERRED_WORKFLOW"
+          echo "deferred_workflow=$DEFERRED_WORKFLOW blob=$deferred_workflow_blob"
           git commit -q -m "import: transfer Auto-Company at $SOURCE_SHA"
           git push -q --force origin "HEAD:refs/heads/$IMPORT_BRANCH"
           echo "SUCCESS branch=$IMPORT_BRANCH commit=$(git rev-parse HEAD)"
