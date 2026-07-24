@@ -1,7 +1,8 @@
-.PHONY: start start-awake awake stop status last cycles monitor dashboard pause resume install uninstall team help
+.PHONY: start start-awake awake stop status last cycles monitor dashboard pause resume install uninstall team clean-logs reset-consensus test validate help
 
 UNAME_S := $(shell uname -s 2>/dev/null || echo Unknown)
 ENGINE ?= claude
+PYTHON ?= python3
 
 # === Quick Start ===
 
@@ -46,8 +47,8 @@ cycles: ## Show cycle history summary
 monitor: ## Tail live logs (Ctrl+C to exit)
 	./scripts/core/monitor.sh
 
-dashboard: ## Start local dashboard server (Windows host or macOS host)
-	python3 dashboard/server.py
+dashboard: ## Start the authenticated local dashboard server
+	$(PYTHON) -m dashboard.secure_server
 
 # === Daemon (macOS launchd / Linux systemd --user) ===
 
@@ -92,6 +93,21 @@ team: ## Start selected engine interactive session (ENGINE=claude|codex)
 		exit 1; \
 	fi; \
 	cd "$(CURDIR)" && "$$engine"
+
+# === Quality ===
+
+test: ## Run all Python unit tests
+	$(PYTHON) -m unittest discover -s tests -p 'test_*.py' -v
+
+validate: ## Validate Python, Bash, JavaScript, and unit tests
+	$(PYTHON) -m compileall -q dashboard tests
+	@find scripts -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+	@if command -v node >/dev/null 2>&1; then \
+		find dashboard projects -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check; \
+	else \
+		echo "node not found; JavaScript syntax validation skipped locally."; \
+	fi
+	$(MAKE) test
 
 # === Maintenance ===
 
