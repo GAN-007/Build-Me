@@ -1,0 +1,57 @@
+name: Core Runtime CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-runtime-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate Python syntax
+        run: |
+          python -m compileall -q dashboard tests
+
+      - name: Run dashboard unit tests
+        run: |
+          python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Validate Bash syntax
+        run: |
+          while IFS= read -r -d '' file; do
+            bash -n "$file"
+          done < <(find scripts -type f -name '*.sh' -print0)
+
+      - name: Validate JavaScript syntax
+        run: |
+          if find dashboard projects -type f -name '*.js' -print -quit | grep -q .; then
+            while IFS= read -r -d '' file; do
+              node --check "$file"
+            done < <(find dashboard projects -type f -name '*.js' -print0)
+          fi
+
+      - name: Reject committed runtime secrets
+        shell: bash
+        run: |
+          if git grep -nE '(sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY)' -- ':!*.md' ':!tests/*'; then
+            echo 'Potential credential material detected in tracked runtime files.' >&2
+            exit 1
+          fi
