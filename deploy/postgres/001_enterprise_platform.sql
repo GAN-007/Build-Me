@@ -1,20 +1,15 @@
 BEGIN;
 
+CREATE EXTENSION IF NOT EXISTS citext;
 CREATE SCHEMA IF NOT EXISTS app;
 
 CREATE OR REPLACE FUNCTION app.current_organization_id()
-RETURNS uuid
-LANGUAGE sql
-STABLE
-AS $$
+RETURNS uuid LANGUAGE sql STABLE AS $$
     SELECT NULLIF(current_setting('app.organization_id', true), '')::uuid
 $$;
 
 CREATE OR REPLACE FUNCTION app.current_user_id()
-RETURNS uuid
-LANGUAGE sql
-STABLE
-AS $$
+RETURNS uuid LANGUAGE sql STABLE AS $$
     SELECT NULLIF(current_setting('app.user_id', true), '')::uuid
 $$;
 
@@ -38,8 +33,6 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (organization_id, email)
 );
-
-CREATE EXTENSION IF NOT EXISTS citext;
 
 CREATE TABLE IF NOT EXISTS identity_sessions (
     id uuid PRIMARY KEY,
@@ -139,12 +132,9 @@ CREATE TABLE IF NOT EXISTS operational_events (
     occurred_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_usage_meter_period
-    ON usage_events(organization_id, meter_key, occurred_at);
-CREATE INDEX IF NOT EXISTS idx_sessions_user
-    ON identity_sessions(organization_id, user_id, revoked_at, expires_at);
-CREATE INDEX IF NOT EXISTS idx_operational_events_org_time
-    ON operational_events(organization_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_usage_meter_period ON usage_events(organization_id, meter_key, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON identity_sessions(organization_id, user_id, revoked_at, expires_at);
+CREATE INDEX IF NOT EXISTS idx_operational_events_org_time ON operational_events(organization_id, occurred_at DESC);
 
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users FORCE ROW LEVEL SECURITY;
