@@ -1,4 +1,4 @@
-.PHONY: start start-awake awake stop status last cycles monitor dashboard pause resume install uninstall team clean-logs reset-consensus test validate help
+.PHONY: start start-awake awake stop status last cycles monitor dashboard enterprise-api pause resume install uninstall team clean-logs reset-consensus test validate help
 
 UNAME_S := $(shell uname -s 2>/dev/null || echo Unknown)
 ENGINE ?= claude
@@ -33,7 +33,7 @@ endif
 stop: ## Stop the loop gracefully
 	./scripts/core/stop-loop.sh
 
-# === Monitoring ===
+# === Monitoring and APIs ===
 
 status: ## Show loop status + latest consensus
 	./scripts/core/monitor.sh --status
@@ -49,6 +49,9 @@ monitor: ## Tail live logs (Ctrl+C to exit)
 
 dashboard: ## Start the authenticated local dashboard server
 	$(PYTHON) -m dashboard.secure_server
+
+enterprise-api: ## Start the versioned authenticated enterprise API
+	$(PYTHON) -m enterprise.api
 
 # === Daemon (macOS launchd / Linux systemd --user) ===
 
@@ -100,7 +103,7 @@ test: ## Run all Python unit tests
 	$(PYTHON) -m unittest discover -s tests -p 'test_*.py' -v
 
 validate: ## Validate Python, Bash, JavaScript, and unit tests
-	$(PYTHON) -m compileall -q dashboard organization tests
+	$(PYTHON) -m compileall -q dashboard organization enterprise tests
 	@find scripts -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
 	@if command -v node >/dev/null 2>&1; then \
 		find dashboard projects -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check; \
