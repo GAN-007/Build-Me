@@ -1,8 +1,10 @@
-.PHONY: start start-awake awake stop status last cycles monitor dashboard enterprise-api pause resume install uninstall team clean-logs reset-consensus test validate help
+.PHONY: start start-awake awake stop status last cycles monitor dashboard enterprise-api pause resume install uninstall team backup restore-drill clean-logs reset-consensus test validate help
 
 UNAME_S := $(shell uname -s 2>/dev/null || echo Unknown)
 ENGINE ?= claude
 PYTHON ?= python3
+DATABASE ?= data/organization.db
+BACKUP_DIR ?= backups
 
 # === Quick Start ===
 
@@ -92,7 +94,7 @@ endif
 team: ## Start selected engine interactive session (ENGINE=claude|codex)
 	@engine="$$(printf '%s' "$(ENGINE)" | tr '[:upper:]' '[:lower:]')"; \
 	if [ "$$engine" != "claude" ] && [ "$$engine" != "codex" ]; then \
-		echo "Unsupported ENGINE='$(ENGINE)'. Use ENGINE=claude or ENGINE=codex."; \
+		echo "Unsupported ENGINE='$(ENGINE)'. Use ENGINE=claude or codex."; \
 		exit 1; \
 	fi; \
 	cd "$(CURDIR)" && "$$engine"
@@ -103,7 +105,7 @@ test: ## Run all Python unit tests
 	$(PYTHON) -m unittest discover -s tests -p 'test_*.py' -v
 
 validate: ## Validate Python, Bash, JavaScript, and unit tests
-	$(PYTHON) -m compileall -q dashboard organization enterprise tests
+	$(PYTHON) -m compileall -q dashboard organization enterprise production tests
 	@find scripts -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
 	@if command -v node >/dev/null 2>&1; then \
 		find dashboard projects -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check; \
@@ -111,6 +113,14 @@ validate: ## Validate Python, Bash, JavaScript, and unit tests
 		echo "node not found; JavaScript syntax validation skipped locally."; \
 	fi
 	$(MAKE) test
+
+# === Recovery ===
+
+backup: ## Create and verify a consistent database backup
+	$(PYTHON) -c 'from production import RecoveryService; import json; service=RecoveryService("$(DATABASE)", "$(BACKUP_DIR)"); manifest=service.create_backup(); service.verify_backup(manifest["backup_id"]); print(json.dumps(manifest, indent=2))'
+
+restore-drill: ## Restore and verify the most recent backup manifest
+	$(PYTHON) -c 'from pathlib import Path; from production import RecoveryService; import json; manifests=sorted(Path("$(BACKUP_DIR)").glob("*.json"), key=lambda p:p.stat().st_mtime, reverse=True); assert manifests, "no backup manifests found"; backup_id=manifests[0].stem; print(json.dumps(RecoveryService("$(DATABASE)", "$(BACKUP_DIR)").restore_drill(backup_id), indent=2))'
 
 # === Maintenance ===
 
