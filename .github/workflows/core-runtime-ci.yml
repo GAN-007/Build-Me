@@ -28,9 +28,9 @@ jobs:
 
       - name: Validate Python syntax
         run: |
-          python -m compileall -q dashboard tests
+          python -m compileall -q dashboard organization tests
 
-      - name: Run dashboard unit tests
+      - name: Run unit tests
         run: |
           python -m unittest discover -s tests -p 'test_*.py' -v
 
