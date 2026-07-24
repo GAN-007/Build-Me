@@ -100,7 +100,7 @@ test: ## Run all Python unit tests
 	$(PYTHON) -m unittest discover -s tests -p 'test_*.py' -v
 
 validate: ## Validate Python, Bash, JavaScript, and unit tests
-	$(PYTHON) -m compileall -q dashboard tests
+	$(PYTHON) -m compileall -q dashboard organization tests
 	@find scripts -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
 	@if command -v node >/dev/null 2>&1; then \
 		find dashboard projects -type f -name '*.js' -print0 | xargs -0 -r -n1 node --check; \
